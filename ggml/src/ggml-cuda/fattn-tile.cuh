@@ -1145,6 +1145,11 @@ static void launch_fattn_tile_switch_ncols1(ggml_backend_cuda_context & ctx, ggm
     const int cc        = ggml_cuda_info().devices[id].cc;
     const int warp_size = 32;
 
+#ifdef GGML_FATTN_TRACE
+    GGML_LOG_INFO("[fattn-path] tile (DKQ=%d, DV=%d, ncols2=%d, Q->ne[1]=%lld)\n",
+                  DKQ, DV, ncols2, (long long)Q->ne[1]);
+#endif
+
     constexpr size_t nbytes_shared = 0;
 
 #ifdef GGML_USE_HIP

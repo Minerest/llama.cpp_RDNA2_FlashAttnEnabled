@@ -1950,6 +1950,10 @@ void ggml_cuda_flash_attn_ext_mma_f16_case(ggml_backend_cuda_context & ctx, ggml
 #endif // !defined(GGML_USE_MUSA)
     }
 
+#ifdef GGML_FATTN_TRACE
+    GGML_LOG_INFO("[fattn-path] mma  (DKQ=%d, DV=%d, ncols1=%d, ncols2=%d, nwarps=%d, nbatch_fa=%d)\n",
+                  DKQ, DV, ncols1, ncols2, nwarps, nbatch_fa);
+#endif
     launch_fattn<DV, ncols1, ncols2>
         (ctx, dst, fattn_kernel, nwarps, nbytes_shared_total, nbatch_fa, true, true, true, warp_size_host);
 }

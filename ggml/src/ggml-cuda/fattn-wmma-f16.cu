@@ -552,6 +552,9 @@ void ggml_cuda_flash_attn_ext_wmma_f16_case(ggml_backend_cuda_context & ctx, ggm
         fattn_kernel = flash_attn_ext_f16<
             D, cols_per_block, nwarps, get_VKQ_stride(D, nwarps, frag_m), KQ_acc_t, use_logit_softcap>;
     }
+#ifdef GGML_FATTN_TRACE
+    GGML_LOG_INFO("[fattn-path] wmma (D=%d, cols_per_block=%d, nwarps=%d)\n", D, cols_per_block, nwarps);
+#endif
     launch_fattn<D, cols_per_block, 1>(ctx, dst, fattn_kernel, nwarps, 0, FATTN_KQ_STRIDE, true, true, false, warp_size);
 }
 
