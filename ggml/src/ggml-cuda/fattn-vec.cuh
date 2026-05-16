@@ -529,6 +529,9 @@ void ggml_cuda_flash_attn_ext_vec_case_impl(ggml_backend_cuda_context & ctx, ggm
     const bool need_f16_K = type_K == GGML_TYPE_F16;
     const bool need_f16_V = type_V == GGML_TYPE_F16;
     constexpr size_t nbytes_shared = 0;
+#ifdef GGML_FATTN_TRACE
+    GGML_LOG_INFO("[fattn-path] vec  (D=%d, cols_per_block=%d, nwarps=%d)\n", D, cols_per_block, nwarps);
+#endif
     launch_fattn<D, cols_per_block, 1>(ctx, dst, fattn_kernel, nwarps, nbytes_shared, D, need_f16_K, need_f16_V, false);
 }
 

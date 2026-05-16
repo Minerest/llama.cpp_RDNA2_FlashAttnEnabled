@@ -1051,7 +1051,24 @@ void launch_fattn(
     const dim3 block_dim(warp_size, nwarps, 1);
     int max_blocks_per_sm = 1; // Max. number of active blocks limited by occupancy.
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&max_blocks_per_sm, fattn_kernel, block_dim.x * block_dim.y * block_dim.z, nbytes_shared));
-    GGML_ASSERT(max_blocks_per_sm > 0);
+#ifdef GGML_FATTN_TRACE
+    {
+        static int fattn_trace_count = 0;
+        if (fattn_trace_count++ < 16) {
+            GGML_LOG_INFO("[fattn-trace] %s\n", __PRETTY_FUNCTION__);
+            GGML_LOG_INFO("[fattn-trace]   device=%d cc=%d nsm=%d  warp_size=%d nwarps=%d  threads/block=%d\n",
+                          id, cc, nsm, warp_size, nwarps, (int)(block_dim.x * block_dim.y * block_dim.z));
+            GGML_LOG_INFO("[fattn-trace]   nbytes_shared=%zu  nbatch_fa=%d  stream_k=%d  need_f16_K=%d need_f16_V=%d\n",
+                          nbytes_shared, nbatch_fa, (int)stream_k, (int)need_f16_K, (int)need_f16_V);
+            GGML_LOG_INFO("[fattn-trace]   cudaOccupancyMaxActiveBlocksPerMultiprocessor -> max_blocks_per_sm=%d\n",
+                          max_blocks_per_sm);
+        }
+    }
+#endif
+    if (max_blocks_per_sm <= 0) {
+        GGML_LOG_WARN("cudaOccupancyMaxActiveBlocksPerMultiprocessor returned %d, falling back to 1\n", max_blocks_per_sm);
+        max_blocks_per_sm = 1;
+    }
     int parallel_blocks = max_blocks_per_sm;
 
     const int ntiles_KV = (K->ne[1] + nbatch_fa - 1) / nbatch_fa; // Max. number of parallel blocks limited by KV cache length.
