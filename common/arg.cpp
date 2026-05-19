@@ -4,7 +4,6 @@
 #include "chat.h"
 #include "common.h"
 #include "download.h"
-#include "hf-cache.h"
 #include "json-schema-to-grammar.h"
 #include "log.h"
 #include "sampling.h"
@@ -586,12 +585,6 @@ static bool common_params_parse_ex(int argc, char ** argv, common_params_context
     // parse the first time to get -hf option (used for remote preset)
     parse_cli_args();
 
-    // TODO: Remove later
-    try {
-        hf_cache::migrate_old_cache_to_hf_cache(params.hf_token, params.offline);
-    } catch (const std::exception & e) {
-        LOG_WRN("HF cache migration failed: %s\n", e.what());
-    }
     // export_graph_ops loads only metadata
     const bool skip_model_download = ctx_arg.ex == LLAMA_EXAMPLE_EXPORT_GRAPH_OPS;
 
@@ -2808,7 +2801,7 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         [](common_params & params, int value) {
             params.embd_normalize = value;
         }
-    ).set_examples({LLAMA_EXAMPLE_EMBEDDING, LLAMA_EXAMPLE_DEBUG}));
+    ).set_examples({LLAMA_EXAMPLE_EMBEDDING, LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_DEBUG}));
     add_opt(common_arg(
         {"--embd-output-format"}, "FORMAT",
         "empty = default, \"array\" = [[],[]...], \"json\" = openai style, \"json+\" = same \"json\" + cosine similarity matrix, \"raw\" = plain whitespace-delimited output (one embedding per line)",

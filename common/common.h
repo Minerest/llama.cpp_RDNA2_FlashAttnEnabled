@@ -617,8 +617,6 @@ struct common_params {
     // UI configs
 #ifdef LLAMA_UI_DEFAULT_ENABLED
     bool ui = LLAMA_UI_DEFAULT_ENABLED != 0;
-#elif defined(LLAMA_WEBUI_DEFAULT_ENABLED)
-    bool ui = LLAMA_WEBUI_DEFAULT_ENABLED != 0;
 #else
     bool ui = true; // default to enabled when not set
 #endif
@@ -708,7 +706,7 @@ struct common_params {
 // initializes the logging system and prints info about the build
 void common_init();
 
-void common_params_print_info(const common_params & params);
+void common_params_print_info(const common_params & params, bool print_devices = true);
 std::string common_params_get_system_info(const common_params & params);
 
 bool parse_cpu_range(const std::string & range, bool(&boolmask)[GGML_MAX_N_THREADS]);
