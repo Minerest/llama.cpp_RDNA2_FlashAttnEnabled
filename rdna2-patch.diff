@@ -1,0 +1,89 @@
+diff --git a/ggml/src/ggml-cuda/fattn-common.cuh b/ggml/src/ggml-cuda/fattn-common.cuh
+index beeb52389..e37819e34 100644
+--- a/ggml/src/ggml-cuda/fattn-common.cuh
++++ b/ggml/src/ggml-cuda/fattn-common.cuh
+@@ -1051,7 +1051,24 @@ void launch_fattn(
+     const dim3 block_dim(warp_size, nwarps, 1);
+     int max_blocks_per_sm = 1; // Max. number of active blocks limited by occupancy.
+     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&max_blocks_per_sm, fattn_kernel, block_dim.x * block_dim.y * block_dim.z, nbytes_shared));
+-    GGML_ASSERT(max_blocks_per_sm > 0);
++#ifdef GGML_FATTN_TRACE
++    {
++        static int fattn_trace_count = 0;
++        if (fattn_trace_count++ < 16) {
++            GGML_LOG_INFO("[fattn-trace] %s\n", __PRETTY_FUNCTION__);
++            GGML_LOG_INFO("[fattn-trace]   device=%d cc=%d nsm=%d  warp_size=%d nwarps=%d  threads/block=%d\n",
++                          id, cc, nsm, warp_size, nwarps, (int)(block_dim.x * block_dim.y * block_dim.z));
++            GGML_LOG_INFO("[fattn-trace]   nbytes_shared=%zu  nbatch_fa=%d  stream_k=%d  need_f16_K=%d need_f16_V=%d\n",
++                          nbytes_shared, nbatch_fa, (int)stream_k, (int)need_f16_K, (int)need_f16_V);
++            GGML_LOG_INFO("[fattn-trace]   cudaOccupancyMaxActiveBlocksPerMultiprocessor -> max_blocks_per_sm=%d\n",
++                          max_blocks_per_sm);
++        }
++    }
++#endif
++    if (max_blocks_per_sm <= 0) {
++        GGML_LOG_WARN("cudaOccupancyMaxActiveBlocksPerMultiprocessor returned %d, falling back to 1\n", max_blocks_per_sm);
++        max_blocks_per_sm = 1;
++    }
+     int parallel_blocks = max_blocks_per_sm;
+ 
+     const int ntiles_KV = (K->ne[1] + nbatch_fa - 1) / nbatch_fa; // Max. number of parallel blocks limited by KV cache length.
+diff --git a/ggml/src/ggml-cuda/fattn-mma-f16.cuh b/ggml/src/ggml-cuda/fattn-mma-f16.cuh
+index a25e912c4..1686e0655 100644
+--- a/ggml/src/ggml-cuda/fattn-mma-f16.cuh
++++ b/ggml/src/ggml-cuda/fattn-mma-f16.cuh
+@@ -1950,6 +1950,10 @@ void ggml_cuda_flash_attn_ext_mma_f16_case(ggml_backend_cuda_context & ctx, ggml
+ #endif // !defined(GGML_USE_MUSA)
+     }
+ 
++#ifdef GGML_FATTN_TRACE
++    GGML_LOG_INFO("[fattn-path] mma  (DKQ=%d, DV=%d, ncols1=%d, ncols2=%d, nwarps=%d, nbatch_fa=%d)\n",
++                  DKQ, DV, ncols1, ncols2, nwarps, nbatch_fa);
++#endif
+     launch_fattn<DV, ncols1, ncols2>
+         (ctx, dst, fattn_kernel, nwarps, nbytes_shared_total, nbatch_fa, true, true, true, warp_size_host);
+ }
+diff --git a/ggml/src/ggml-cuda/fattn-tile.cuh b/ggml/src/ggml-cuda/fattn-tile.cuh
+index 7b0a5e5cf..be6aeae28 100644
+--- a/ggml/src/ggml-cuda/fattn-tile.cuh
++++ b/ggml/src/ggml-cuda/fattn-tile.cuh
+@@ -1145,6 +1145,11 @@ static void launch_fattn_tile_switch_ncols1(ggml_backend_cuda_context & ctx, ggm
+     const int cc        = ggml_cuda_info().devices[id].cc;
+     const int warp_size = 32;
+ 
++#ifdef GGML_FATTN_TRACE
++    GGML_LOG_INFO("[fattn-path] tile (DKQ=%d, DV=%d, ncols2=%d, Q->ne[1]=%lld)\n",
++                  DKQ, DV, ncols2, (long long)Q->ne[1]);
++#endif
++
+     constexpr size_t nbytes_shared = 0;
+ 
+ #ifdef GGML_USE_HIP
+diff --git a/ggml/src/ggml-cuda/fattn-vec.cuh b/ggml/src/ggml-cuda/fattn-vec.cuh
+index f0bd42a57..522901857 100644
+--- a/ggml/src/ggml-cuda/fattn-vec.cuh
++++ b/ggml/src/ggml-cuda/fattn-vec.cuh
+@@ -529,6 +529,9 @@ void ggml_cuda_flash_attn_ext_vec_case_impl(ggml_backend_cuda_context & ctx, ggm
+     const bool need_f16_K = type_K == GGML_TYPE_F16;
+     const bool need_f16_V = type_V == GGML_TYPE_F16;
+     constexpr size_t nbytes_shared = 0;
++#ifdef GGML_FATTN_TRACE
++    GGML_LOG_INFO("[fattn-path] vec  (D=%d, cols_per_block=%d, nwarps=%d)\n", D, cols_per_block, nwarps);
++#endif
+     launch_fattn<D, cols_per_block, 1>(ctx, dst, fattn_kernel, nwarps, nbytes_shared, D, need_f16_K, need_f16_V, false);
+ }
+ 
+diff --git a/ggml/src/ggml-cuda/fattn-wmma-f16.cu b/ggml/src/ggml-cuda/fattn-wmma-f16.cu
+index f19defbff..20dfde7c7 100644
+--- a/ggml/src/ggml-cuda/fattn-wmma-f16.cu
++++ b/ggml/src/ggml-cuda/fattn-wmma-f16.cu
+@@ -552,6 +552,9 @@ void ggml_cuda_flash_attn_ext_wmma_f16_case(ggml_backend_cuda_context & ctx, ggm
+         fattn_kernel = flash_attn_ext_f16<
+             D, cols_per_block, nwarps, get_VKQ_stride(D, nwarps, frag_m), KQ_acc_t, use_logit_softcap>;
+     }
++#ifdef GGML_FATTN_TRACE
++    GGML_LOG_INFO("[fattn-path] wmma (D=%d, cols_per_block=%d, nwarps=%d)\n", D, cols_per_block, nwarps);
++#endif
+     launch_fattn<D, cols_per_block, 1>(ctx, dst, fattn_kernel, nwarps, 0, FATTN_KQ_STRIDE, true, true, false, warp_size);
+ }
+ 
